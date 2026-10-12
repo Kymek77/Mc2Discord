@@ -18,7 +18,8 @@ public class MinecraftEvents {
         if (Mc2Discord.INSTANCE.hiddenPlayerList.contains(player.uuid))
             return;
 
-        MessageManager.sendChatMessage(message, Entity.replace(Mc2Discord.INSTANCE.config.style.webhook_display_name, List.of(player)), Entity.replace(Mc2Discord.INSTANCE.config.style.webhook_avatar_api, List.of(player))).subscribe();
+        MessageManager.sendChatMessage(message, Entity.replace(Mc2Discord.INSTANCE.config.style.webhook_display_name, List.of(player)), Entity.replace(Mc2Discord.INSTANCE.config.style.webhook_avatar_api, List.of(player)))
+                .subscribe(null, error -> Mc2Discord.LOGGER.error("Failed to send chat message to Discord: {}", error.getMessage()));
     }
 
     public static void onPlayerConnectEvent(PlayerEntity player) {
@@ -27,7 +28,8 @@ public class MinecraftEvents {
 
         if (Mc2Discord.INSTANCE.hiddenPlayerList.contains(player.uuid))
             return;
-        MessageManager.sendInfoMessage("player_connect", Entity.replace(Mc2Discord.INSTANCE.config.messages.join.asString(), List.of(player))).subscribe();
+        MessageManager.sendInfoMessage("player_connect", Entity.replace(Mc2Discord.INSTANCE.config.messages.join.asString(), List.of(player)))
+                .subscribe(null, error -> Mc2Discord.LOGGER.error("Failed to send player connect message to Discord: {}", error.getMessage()));
     }
 
     public static void onPlayerDisconnectEvent(PlayerEntity player) {
@@ -36,7 +38,8 @@ public class MinecraftEvents {
 
         if (Mc2Discord.INSTANCE.hiddenPlayerList.contains(player.uuid))
             return;
-        MessageManager.sendInfoMessage("player_disconnect", Entity.replace(Mc2Discord.INSTANCE.config.messages.leave.asString(), List.of(player))).subscribe();
+        MessageManager.sendInfoMessage("player_disconnect", Entity.replace(Mc2Discord.INSTANCE.config.messages.leave.asString(), List.of(player)))
+                .subscribe(null, error -> Mc2Discord.LOGGER.error("Failed to send player disconnect message to Discord: {}", error.getMessage()));
     }
 
     public static void onPlayerDeathEvent(PlayerEntity player, DeathEntity death) {
@@ -46,7 +49,8 @@ public class MinecraftEvents {
         if (Mc2Discord.INSTANCE.hiddenPlayerList.contains(player.uuid))
             return;
 
-        MessageManager.sendInfoMessage("player_death", Entity.replace(Mc2Discord.INSTANCE.config.messages.death.asString(), List.of(player, death))).subscribe();
+        MessageManager.sendInfoMessage("player_death", Entity.replace(Mc2Discord.INSTANCE.config.messages.death.asString(), List.of(player, death)))
+                .subscribe(null, error -> Mc2Discord.LOGGER.error("Failed to send player death message to Discord: {}", error.getMessage()));
     }
 
     public static void onAdvancementEvent(PlayerEntity player, AdvancementEntity advancement) {
@@ -56,6 +60,7 @@ public class MinecraftEvents {
         if (Mc2Discord.INSTANCE.hiddenPlayerList.contains(player.uuid))
             return;
 
-        MessageManager.sendInfoMessage("player_advancement", Entity.replace(Mc2Discord.INSTANCE.config.messages.advancement.asString(), List.of(player, advancement))).subscribe();
+        MessageManager.sendInfoMessage("player_advancement", Entity.replace(Mc2Discord.INSTANCE.config.messages.advancement.asString(), List.of(player, advancement)))
+                .subscribe(null, error -> Mc2Discord.LOGGER.error("Failed to send advancement message to Discord: {}", error.getMessage()));
     }
 }

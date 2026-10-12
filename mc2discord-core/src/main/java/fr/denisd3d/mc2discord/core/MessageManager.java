@@ -13,12 +13,15 @@ import fr.denisd3d.mc2discord.core.config.Channels;
 import fr.denisd3d.mc2discord.core.entities.Entity;
 import fr.denisd3d.mc2discord.core.entities.MessageEntity;
 import fr.denisd3d.mc2discord.core.entities.PlayerEntity;
+import discord4j.rest.http.client.ClientException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageManager {
+    public static final Map<Snowflake, Webhook> WEBHOOK_CACHE = new ConcurrentHashMap<>();
     public static Possible<String> default_username = Possible.absent();
     public static Possible<String> default_avatar = Possible.absent();
 
@@ -121,7 +124,13 @@ public class MessageManager {
                             if (files != null)
                                 builder.files(files);
 
-                            return webhook.execute(builder.build());
+                            return webhook.execute(builder.build())
+                                    .onErrorResume(throwable -> {
+                                        if (throwable instanceof ClientException clientException && clientException.getStatus().code() == 404) {
+                                            WEBHOOK_CACHE.remove(channel);
+                                        }
+                                        return Mono.error(throwable);
+                                    });
                         }))
                 .then();
     }
@@ -133,11 +142,17 @@ public class MessageManager {
      * @return A Mono<Webhook> that completes when the webhook is found or created
      */
     public static Mono<Webhook> getMc2DiscordWebhook(Snowflake channel) {
+        Webhook cached = WEBHOOK_CACHE.get(channel);
+        if (cached != null) {
+            return Mono.just(cached);
+        }
+
         Mono<TopLevelGuildMessageChannel> channelMono = Mc2Discord.INSTANCE.client.getChannelById(channel).ofType(TopLevelGuildMessageChannel.class).switchIfEmpty(Mono.fromRunnable(() -> Mc2Discord.LOGGER.error("Invalid channel type, channel {} must support webhooks (use another channel or another mode)", channel.asString())));
         return channelMono.flatMapMany(TopLevelGuildMessageChannel::getWebhooks)
                 .filter(webhook -> webhook.getName().isPresent() && webhook.getName().get().equals(Mc2Discord.INSTANCE.vars.mc2discord_webhook_name))
                 .switchIfEmpty(channelMono.flatMap(channel1 -> channel1.createWebhook(Mc2Discord.INSTANCE.vars.mc2discord_webhook_name)))
-                .next();
+                .next()
+                .doOnNext(webhook -> WEBHOOK_CACHE.put(channel, webhook));
     }
 
     /**

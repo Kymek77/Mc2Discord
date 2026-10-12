@@ -21,14 +21,16 @@ import fr.denisd3d.mc2discord.core.events.DiscordEvent;
 import fr.denisd3d.mc2discord.core.events.LifecycleEvents;
 import fr.denisd3d.mc2discord.core.storage.HiddenPlayerList;
 import fr.denisd3d.mc2discord.core.storage.LinkedPlayerList;
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.retry.Retry;
-import reactor.util.retry.RetrySpec;
+import reactor.util.retry.Retry;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,21 +56,43 @@ public class Mc2Discord {
             return;
         }
 
+        ConnectionProvider connectionProvider = ConnectionProvider.builder("mc2discord")
+                .maxConnections(500)
+                .maxIdleTime(Duration.ofSeconds(45))
+                .maxLifeTime(Duration.ofMinutes(5))
+                .pendingAcquireTimeout(Duration.ofSeconds(60))
+                .evictInBackground(Duration.ofSeconds(30))
+                .build();
+
+        ConnectionProvider gatewayConnectionProvider = ConnectionProvider.builder("d4j-gateway")
+                .maxConnections(1)
+                .maxIdleTime(Duration.ofSeconds(45))
+                .maxLifeTime(Duration.ofMinutes(5))
+                .pendingAcquireTimeout(Duration.ofSeconds(60))
+                .evictInBackground(Duration.ofSeconds(30))
+                .build();
+
         DiscordClient.builder(this.config.general.token)
                 .setReactorResources(ReactorResources.builder()
-                        .httpClient(ReactorResources.newHttpClient(ConnectionProvider.create("mc2discord"))
+                        .httpClient(ReactorResources.newHttpClient(connectionProvider)
+                                .option(ChannelOption.SO_KEEPALIVE, true)
+                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
+                                .responseTimeout(Duration.ofSeconds(10))
                                 .proxyWithSystemProperties())
                         .build())
                 .onClientResponse(
                         ResponseFunction.retryWhen(
                                 RouteMatcher.any(),
-                                RetrySpec.withThrowable(Retry.anyOf(IOException.class)))
+                                Retry.backoff(3, Duration.ofMillis(500))
+                                        .filter(t -> t instanceof IOException || t instanceof TimeoutException || t instanceof java.util.concurrent.TimeoutException))
                 )
                 .build()
                 .gateway()
                 .setEnabledIntents(IntentSet.all().andNot(IntentSet.of(Intent.GUILD_PRESENCES)))
                 .setGatewayReactorResources(reactorResources -> GatewayReactorResources.builder(reactorResources)
-                        .httpClient(ReactorResources.newHttpClient(ConnectionProvider.create("d4j-gateway", 1))
+                        .httpClient(ReactorResources.newHttpClient(gatewayConnectionProvider)
+                                .option(ChannelOption.SO_KEEPALIVE, true)
+                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                                 .proxyWithSystemProperties())
                         .build())
                 .login()
@@ -127,6 +151,7 @@ public class Mc2Discord {
         StatusManager.stop();
         LoggingManager.stop();
         AccountManager.stop();
+        MessageManager.WEBHOOK_CACHE.clear();
 
         return this.client != null ? this.client.logout() : Mono.empty();
     }
